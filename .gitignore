@@ -1,0 +1,6 @@
+.git/
+node_modules/
+headers/
+dlls/
+build/
+steam_appid.txt

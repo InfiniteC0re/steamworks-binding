@@ -1,0 +1,12 @@
+{
+  "name": "steamworks-binding",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "build": "node-gyp configure build"
+  },
+  "devDependencies": {
+    "node-gyp": "7.1.0"
+  }
+}
