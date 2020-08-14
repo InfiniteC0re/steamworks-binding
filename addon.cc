@@ -1,7 +1,7 @@
 #include <array>
 #include <iostream>
 #include <string>
-#include "C:\Users\InfiniteC0re\.electron-gyp\9.2.0\include\node\node.h"
+#include <node.h>
 #include ".\headers\steam_api.h"
 
 using namespace v8;
