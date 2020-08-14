@@ -1,12 +1,13 @@
 #include <array>
 #include <iostream>
-#include "C:\Users\InfiniteC0re\AppData\Local\node-gyp\Cache\12.18.0\include\node\node.h"
+#include <string>
+#include "C:\Users\InfiniteC0re\.electron-gyp\9.2.0\include\node\node.h"
 #include ".\headers\steam_api.h"
 
 using namespace v8;
 using namespace node;
 
-Local<Array> GetAvatar(v8::Isolate* isolate, int avatarHandle) {
+Local<Array> GetAvatar(Isolate* isolate, int avatarHandle) {
     unsigned int avatarHeight;
     unsigned int avatarWidth;
 
@@ -14,6 +15,7 @@ Local<Array> GetAvatar(v8::Isolate* isolate, int avatarHandle) {
     steamUtils->GetImageSize(avatarHandle, &avatarWidth, &avatarHeight);
 
     const int bufferSize = avatarWidth * avatarHeight * 4;
+    auto context = isolate->GetCurrentContext();
 
     uint8 *avatar= new uint8[bufferSize];
 
@@ -22,117 +24,164 @@ Local<Array> GetAvatar(v8::Isolate* isolate, int avatarHandle) {
 
     if(gotAvatar) {
         for(int i = 0; i < avatarWidth * avatarHeight * 4; i++) {
-            avatarArray->Set(i, Number::New(isolate, avatar[i]));
+            avatarArray->Set(context, i, Number::New(isolate, avatar[i]));
         }
     }
 
     return avatarArray;
 }
 
-void GYPSteamAPI_Init(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    v8::Isolate* isolate = args.GetIsolate();
+Local<Object> GetFriendInfo(Isolate* isolate, ISteamFriends* steamFriends, CSteamID id, const char* keyStr, bool getAvatars) {
+    Local<Context> context = isolate->GetCurrentContext();
+
+    Local<Value> personaName = String::NewFromUtf8(isolate, steamFriends->GetFriendPersonaName(id)).ToLocalChecked();
+    Local<Value> personaState = Number::New(isolate, steamFriends->GetFriendPersonaState(id));
+    Local<Value> friendRPC = String::NewFromUtf8(isolate, steamFriends->GetFriendRichPresence(id, keyStr)).ToLocalChecked();
+    Local<Value> friendID = Number::New(isolate, (int32)id.GetAccountID());
+
+    FriendGameInfo_t gameInfo;
+    bool playingGame = steamFriends->GetFriendGamePlayed(id, &gameInfo);
+
+    Local<Object> nodes = Object::New(isolate);
+    nodes->Set(context, String::NewFromUtf8(isolate, "personaName").ToLocalChecked(), personaName);
+    nodes->Set(context, String::NewFromUtf8(isolate, "personaState").ToLocalChecked(), personaState);
+    nodes->Set(context, String::NewFromUtf8(isolate, "friendRPC").ToLocalChecked(), friendRPC);
+    nodes->Set(context, String::NewFromUtf8(isolate, "friendID").ToLocalChecked(), friendID);
+    nodes->Set(context, String::NewFromUtf8(isolate, "gamePlayed").ToLocalChecked(), Boolean::New(isolate, playingGame));
+
+    if(playingGame) {
+        nodes->Set(context, String::NewFromUtf8(isolate, "appID").ToLocalChecked(), Number::New(isolate, gameInfo.m_gameID.AppID()));
+    }
+    
+    if(getAvatars) {
+        int avatarHandle = steamFriends->GetSmallFriendAvatar(id);
+        Local<Array> avatar = GetAvatar(isolate, avatarHandle);
+        nodes->Set(context, String::NewFromUtf8(isolate, "avatar").ToLocalChecked(), avatar);
+    }
+
+    std::cout << keyStr << std::endl;
+
+    return nodes;
+}
+
+void GYPSteamAPI_GetPersonaStates(const FunctionCallbackInfo<Value>& args) {
+    Isolate* isolate = args.GetIsolate();
+    Local<Context> context = isolate->GetCurrentContext();
+    
+    Local<Array> result;
+
+    result->Set(context, Number::New(isolate, EPersonaState::k_EPersonaStateAway), String::NewFromUtf8(isolate, "k_EPersonaStateAway").ToLocalChecked());
+    result->Set(context, Number::New(isolate, EPersonaState::k_EPersonaStateBusy), String::NewFromUtf8(isolate, "k_EPersonaStateBusy").ToLocalChecked());
+    result->Set(context, Number::New(isolate, EPersonaState::k_EPersonaStateInvisible), String::NewFromUtf8(isolate, "k_EPersonaStateInvisible").ToLocalChecked());
+    result->Set(context, Number::New(isolate, EPersonaState::k_EPersonaStateLookingToPlay), String::NewFromUtf8(isolate, "k_EPersonaStateLookingToPlay").ToLocalChecked());
+    result->Set(context, Number::New(isolate, EPersonaState::k_EPersonaStateLookingToTrade), String::NewFromUtf8(isolate, "k_EPersonaStateLookingToTrade").ToLocalChecked());
+    result->Set(context, Number::New(isolate, EPersonaState::k_EPersonaStateMax), String::NewFromUtf8(isolate, "k_EPersonaStateMax").ToLocalChecked());
+    result->Set(context, Number::New(isolate, EPersonaState::k_EPersonaStateOffline), String::NewFromUtf8(isolate, "k_EPersonaStateOffline").ToLocalChecked());
+    result->Set(context, Number::New(isolate, EPersonaState::k_EPersonaStateOnline), String::NewFromUtf8(isolate, "k_EPersonaStateOnline").ToLocalChecked());
+    result->Set(context, Number::New(isolate, EPersonaState::k_EPersonaStateSnooze), String::NewFromUtf8(isolate, "k_EPersonaStateSnooze").ToLocalChecked());
+
+    args.GetReturnValue().Set(result);
+}
+
+void GYPSteamAPI_Init(const FunctionCallbackInfo<Value>& args) {
+    Isolate* isolate = args.GetIsolate();
 
     bool state = SteamAPI_Init();
-    auto result = v8::Boolean::New(isolate, state);
+    Local<Boolean> result = Boolean::New(isolate, state);
     
     args.GetReturnValue().Set(result);
 }
 
-void GYPSteamAPI_GetFriendCount(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void GYPSteamAPI_GetPersonName(const FunctionCallbackInfo<Value>& args) {
     ISteamFriends* steamFriends = SteamFriends();
 
-    v8::Isolate* isolate = args.GetIsolate();
+    Isolate* isolate = args.GetIsolate();
+
+    Local<Value> personaName = String::NewFromUtf8(isolate, steamFriends->GetPersonaName()).ToLocalChecked();
+
+    args.GetReturnValue().Set(personaName);
+}
+
+void GYPSteamAPI_GetFriendCount(const FunctionCallbackInfo<Value>& args) {
+    ISteamFriends* steamFriends = SteamFriends();
+
+    Isolate* isolate = args.GetIsolate();
 
     int count = steamFriends->GetFriendCount(EFriendFlags::k_EFriendFlagAll);
 
-    auto result = v8::Number::New(isolate, count);
+    Local<Number> result = Number::New(isolate, count);
 
     args.GetReturnValue().Set(result);
 }
 
-void GYPSteamAPI_GetFriendByIndex(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void GYPSteamAPI_GetFriendByIndex(const FunctionCallbackInfo<Value>& args) {
     ISteamFriends* steamFriends = SteamFriends();
 
-    v8::Isolate* isolate = args.GetIsolate();
-    auto context = NewContext(isolate);
+    Isolate* isolate = args.GetIsolate();
+    Local<Context> context = isolate->GetCurrentContext();
+
+    v8::String::Utf8Value keyStr(isolate, args[1]);
+    bool getAvatars = args[2]->BooleanValue(isolate);
     
     CSteamID id = steamFriends->GetFriendByIndex(args[0]->Int32Value(context).FromJust(), EFriendFlags::k_EFriendFlagAll);
-    auto friendName = v8::String::NewFromUtf8(isolate, steamFriends->GetFriendPersonaName(id));
-    auto friendRPC = v8::String::NewFromUtf8(isolate, steamFriends->GetFriendRichPresence(id, "hlsr"));
-    auto friendID = v8::Number::New(isolate, (int32)id.GetAccountID());
-    int avatarHandle = steamFriends->GetSmallFriendAvatar(id);
 
-    auto avatar = GetAvatar(isolate, avatarHandle);
-
-    Local<Object> nodes = Object::New(isolate);
-    nodes->Set(v8::String::NewFromUtf8(isolate, "personaName"), friendName);
-    nodes->Set(v8::String::NewFromUtf8(isolate, "friendRPC"), friendRPC);
-    nodes->Set(v8::String::NewFromUtf8(isolate, "friendID"), friendID);   
-    nodes->Set(v8::String::NewFromUtf8(isolate, "avatar"), avatar);
+    Local<Object> nodes = GetFriendInfo(isolate, steamFriends, id, (const char*)*keyStr, getAvatars);
 
     args.GetReturnValue().Set(nodes);
 }
 
-void GYPSteamAPI_GetFriends(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void GYPSteamAPI_GetFriends(const FunctionCallbackInfo<Value>& args) {
     ISteamFriends* steamFriends = SteamFriends();
 
-    v8::Isolate* isolate = args.GetIsolate();
-    auto context = NewContext(isolate);
+    Isolate* isolate = args.GetIsolate();
+    Local<Context> context = isolate->GetCurrentContext();
 
-    Local<String> keyStr = args[0].As<String>();
+    v8::String::Utf8Value keyStr(isolate, args[0]);
+    bool getAvatars = args[1]->BooleanValue(isolate);
     
     int count = steamFriends->GetFriendCount(EFriendFlags::k_EFriendFlagAll);
     Local<Array> arr = Array::New(isolate);
 
     for(int i = 0; i < count; i++) {
         CSteamID id = steamFriends->GetFriendByIndex(i, EFriendFlags::k_EFriendFlagAll);
-        auto friendName = v8::String::NewFromUtf8(isolate, steamFriends->GetFriendPersonaName(id));
-        auto friendRPC = v8::String::NewFromUtf8(isolate, steamFriends->GetFriendRichPresence(id, (const char*)*keyStr));
-        auto friendID = v8::Number::New(isolate, (int32)id.GetAccountID());
-        int avatarHandle = steamFriends->GetSmallFriendAvatar(id);
 
-        auto avatar = GetAvatar(isolate, avatarHandle);
+        Local<Object> obj = GetFriendInfo(isolate, steamFriends, id, (const char*)*keyStr, getAvatars);
 
-        Local<Object> obj = Object::New(isolate);
-        obj->Set(v8::String::NewFromUtf8(isolate, "personaName"), friendName);
-        obj->Set(v8::String::NewFromUtf8(isolate, "friendRPC"), friendRPC);
-        obj->Set(v8::String::NewFromUtf8(isolate, "friendID"), friendID);
-        obj->Set(v8::String::NewFromUtf8(isolate, "avatar"), avatar);
-
-        arr->Set(i, obj);
+        arr->Set(context, i, obj);
     }
 
     args.GetReturnValue().Set(arr);
 }
 
-void GYPSteamAPI_SetRichPresense(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void GYPSteamAPI_SetRichPresense(const FunctionCallbackInfo<Value>& args) {
     ISteamFriends* steamFriends = SteamFriends();
 
-    v8::Isolate* isolate = args.GetIsolate();
-    auto context = NewContext(isolate);
+    Isolate* isolate = args.GetIsolate();
+    Local<Context> context = isolate->GetCurrentContext();
 
-    Local<String> keyStr = args[0].As<String>();
-    Local<String> valStr = args[1].As<String>();
+    v8::String::Utf8Value keyStr(isolate, args[0]);
+    v8::String::Utf8Value valStr(isolate, args[1]);
 
     const char* key = (const char*)*keyStr;
     const char* val = (const char*)*valStr;
 
-    auto result = v8::Boolean::New(isolate, steamFriends->SetRichPresence(key, val));
+    Local<Boolean> result = Boolean::New(isolate, steamFriends->SetRichPresence(key, val));
     args.GetReturnValue().Set(result);
-
 }
 
-void GYPSteamAPI_RunCallbacks(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void GYPSteamAPI_RunCallbacks(const FunctionCallbackInfo<Value>& args) {
     SteamAPI_RunCallbacks();
 }
 
-void Initialize(v8::Local<v8::Object> exports) {
+void Initialize(Local<Object> exports) {
     NODE_SET_METHOD(exports, "SteamAPI_Init", GYPSteamAPI_Init);
     NODE_SET_METHOD(exports, "SteamAPI_RunCallbacks", GYPSteamAPI_RunCallbacks);
     NODE_SET_METHOD(exports, "GetFriendCount", GYPSteamAPI_GetFriendCount);
+    NODE_SET_METHOD(exports, "GetPersonaStates", GYPSteamAPI_GetPersonaStates);
     NODE_SET_METHOD(exports, "GetFriendByIndex", GYPSteamAPI_GetFriendByIndex);
     NODE_SET_METHOD(exports, "SetRichPresense", GYPSteamAPI_SetRichPresense);
     NODE_SET_METHOD(exports, "GetFriends", GYPSteamAPI_GetFriends);
+    NODE_SET_METHOD(exports, "GetPersonName", GYPSteamAPI_GetPersonName);
 }
 
 NODE_MODULE(addon, Initialize)

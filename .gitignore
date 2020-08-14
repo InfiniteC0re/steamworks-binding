@@ -1,4 +1,5 @@
 .git/
+bin/
 node_modules/
 build/
 steam_appid.txt
