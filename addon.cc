@@ -54,7 +54,7 @@ Local<Object> GetFriendInfo(Isolate* isolate, ISteamFriends* steamFriends, CStea
     }
     
     if(getAvatars) {
-        int avatarHandle = steamFriends->GetSmallFriendAvatar(id);
+        int avatarHandle = steamFriends->GetMediumFriendAvatar(id);
         Local<Array> avatar = GetAvatar(isolate, avatarHandle);
         nodes->Set(context, String::NewFromUtf8(isolate, "avatar").ToLocalChecked(), avatar);
     }
