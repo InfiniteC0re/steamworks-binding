@@ -1,5 +1,4 @@
 #include <array>
-#include <iostream>
 #include <string>
 #include <node.h>
 #include ".\headers\steam_api.h"
@@ -33,11 +32,13 @@ Local<Array> GetAvatar(Isolate* isolate, int avatarHandle) {
 
 Local<Object> GetFriendInfo(Isolate* isolate, ISteamFriends* steamFriends, CSteamID id, const char* keyStr, bool getAvatars) {
     Local<Context> context = isolate->GetCurrentContext();
-
     Local<Value> personaName = String::NewFromUtf8(isolate, steamFriends->GetFriendPersonaName(id)).ToLocalChecked();
     Local<Value> personaState = Number::New(isolate, steamFriends->GetFriendPersonaState(id));
     Local<Value> friendRPC = String::NewFromUtf8(isolate, steamFriends->GetFriendRichPresence(id, keyStr)).ToLocalChecked();
-    Local<Value> friendID = Number::New(isolate, (int32)id.GetAccountID());
+    uint64_t id64 = id.ConvertToUint64();
+    std::string id64str = std::to_string(id64);
+
+    Local<Value> friendID = String::NewFromUtf8(isolate, id64str.c_str()).ToLocalChecked();
 
     FriendGameInfo_t gameInfo;
     bool playingGame = steamFriends->GetFriendGamePlayed(id, &gameInfo);
@@ -58,8 +59,6 @@ Local<Object> GetFriendInfo(Isolate* isolate, ISteamFriends* steamFriends, CStea
         Local<Array> avatar = GetAvatar(isolate, avatarHandle);
         nodes->Set(context, String::NewFromUtf8(isolate, "avatar").ToLocalChecked(), avatar);
     }
-
-    std::cout << keyStr << std::endl;
 
     return nodes;
 }

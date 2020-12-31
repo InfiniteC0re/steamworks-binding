@@ -3,4 +3,5 @@
 bin/
 node_modules/
 build/
+9.2.0/
 steam_appid.txt
